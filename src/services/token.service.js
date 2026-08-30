@@ -72,6 +72,13 @@ function verifyResetToken(token) {
   return payload;
 }
 
+async function revokeAllRefreshTokensForUser(userId) {
+  await pool.query(
+    "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+    [userId],
+  );
+}
+
 module.exports = {
   signAccessToken,
   signRefreshToken,
@@ -83,4 +90,5 @@ module.exports = {
   revokeRefreshToken,
   signResetToken,
   verifyResetToken,
+  revokeAllRefreshTokensForUser,
 };

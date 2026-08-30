@@ -14,5 +14,6 @@ router.get("/me", usersController.getMe);
 router.patch("/me", usersController.updateMe);
 router.post("/me/photo", upload.single("photo"), usersController.uploadPhoto);
 router.get("/me/attendance-history", usersController.getAttendanceHistory);
+router.post("/me/logout-all", usersController.logoutAllDevices);
 
 module.exports = router;

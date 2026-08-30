@@ -5,6 +5,8 @@ const pool = require("../config/db");
 const multer = require("multer");
 const supabase = require("../config/supabaseStorage");
 
+const { revokeAllRefreshTokensForUser } = require("../services/token.service");
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -54,6 +56,7 @@ async function updateMe(req, res, next) {
     "domicile_address",
     "birth_place",
     "birth_date",
+    "email",
   ];
   const updates = {};
 
@@ -87,19 +90,26 @@ async function updateMe(req, res, next) {
       data: { ...user, profile_completion: calculateCompletion(user) },
     });
   } catch (err) {
+    if (err.code === "23505") {
+      return res
+        .status(409)
+        .json({
+          error: true,
+          code: "email_taken",
+          message: "This email is already in use.",
+        });
+    }
     return next(err);
   }
 }
 
 async function uploadPhoto(req, res, next) {
   if (!req.file) {
-    return res
-      .status(422)
-      .json({
-        error: true,
-        code: "validation_error",
-        message: "No photo file provided.",
-      });
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "No photo file provided.",
+    });
   }
 
   const fileExt = req.file.originalname.split(".").pop();
@@ -162,4 +172,19 @@ async function getAttendanceHistory(req, res, next) {
   }
 }
 
-module.exports = { getMe, updateMe, uploadPhoto, getAttendanceHistory };
+async function logoutAllDevices(req, res, next) {
+  try {
+    await revokeAllRefreshTokensForUser(req.user.id);
+    return res.status(204).send();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = {
+  getMe,
+  updateMe,
+  uploadPhoto,
+  getAttendanceHistory,
+  logoutAllDevices,
+};

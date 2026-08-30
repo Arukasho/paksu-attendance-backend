@@ -5,9 +5,11 @@
   "main": "server.js",
   "scripts": {
     "dev": "node --watch server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "jest"
   },
   "dependencies": {
+    "@sentry/node": "^10.72.0",
     "@supabase/supabase-js": "^2.109.0",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
@@ -19,5 +21,9 @@
     "nodemailer": "^9.0.6",
     "pg": "^8.12.0",
     "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "jest": "^30.5.0",
+    "supertest": "^7.2.2"
   }
 }

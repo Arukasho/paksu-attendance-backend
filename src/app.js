@@ -8,13 +8,34 @@ const adminEventsRoutes = require("./routes/admin/events.routes");
 const adminParticipantsRoutes = require("./routes/admin/participants.routes");
 const adminDashboardRoutes = require("./routes/admin/dashboard.routes");
 
+const Sentry = require("@sentry/node");
+Sentry.setupExpressErrorHandler(app);
+
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
 app.set("trust proxy", 1);
 
-app.use(cors());
+const allowedOrigins = [
+  "https://absensi-paksu.online",
+  "https://www.absens-paksu.online",
+  "https://admin.absens-paksu.online",
+  "http://localhost:3001",
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+  }),
+);
+
 app.use(express.json());
 
 // Simple health check — hit this first to confirm the server + DB connection work
