@@ -10,7 +10,8 @@ async function list(req, res, next) {
   try {
     let query = `
       SELECT u.id, u.full_name, u.username, u.phone, u.email, u.university,
-             (SELECT COUNT(*) FROM attendance a WHERE a.user_id = u.id) AS events_attended
+            u.stambuk, u.domicile_address, u.birth_place, u.birth_date,
+            (SELECT COUNT(*) FROM attendance a WHERE a.user_id = u.id) AS events_attended
       FROM users u
       WHERE u.deleted_at IS NULL
     `;

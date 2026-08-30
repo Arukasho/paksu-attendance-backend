@@ -6,7 +6,7 @@ async function list(req, res, next) {
       `SELECT e.id, e.name, e.event_datetime, e.location, e.checkin_open_minutes, e.checkin_close_minutes,
           e.auto_activate,
           CASE WHEN e.auto_activate THEN
-            (now() BETWEEN e.event_datetime - interval '2 hours' AND e.event_datetime + interval '1 hours')
+            (now() BETWEEN e.event_datetime - interval '3 hours' AND e.event_datetime + interval '3 hours')
           ELSE e.is_active END AS is_active,
           (SELECT COUNT(*) FROM attendance a WHERE a.event_id = e.id) AS attended_count
    FROM events e

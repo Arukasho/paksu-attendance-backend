@@ -5,8 +5,14 @@ async function summary(req, res, next) {
   try {
     const activeEventResult = await pool.query(
       `SELECT id, name, event_datetime FROM events
-       WHERE is_active = true AND deleted_at IS NULL AND event_datetime::date = CURRENT_DATE
-       ORDER BY event_datetime ASC LIMIT 1`,
+   WHERE deleted_at IS NULL
+     AND event_datetime::date = CURRENT_DATE
+     AND (
+       (auto_activate = true AND now() BETWEEN event_datetime - interval '3 hours' AND event_datetime + interval '3 hours')
+       OR (auto_activate = false AND is_active = true)
+     )
+   ORDER BY auto_activate ASC, event_datetime ASC
+   LIMIT 1`,
     );
 
     if (activeEventResult.rows.length === 0) {
@@ -110,11 +116,9 @@ async function eventAttendanceFull(req, res, next) {
       [eventId, search],
     );
 
-    return res
-      .status(200)
-      .json({
-        data: { event: eventResult.rows[0], attendees: attendeesResult.rows },
-      });
+    return res.status(200).json({
+      data: { event: eventResult.rows[0], attendees: attendeesResult.rows },
+    });
   } catch (err) {
     return next(err);
   }
@@ -136,14 +140,12 @@ async function manualCheckin(req, res, next) {
       "INSERT INTO attendance (user_id, event_id) VALUES ($1, $2) RETURNING checked_in_at",
       [userId, eventId],
     );
-    return res
-      .status(201)
-      .json({
-        data: {
-          status: "success",
-          checked_in_at: inserted.rows[0].checked_in_at,
-        },
-      });
+    return res.status(201).json({
+      data: {
+        status: "success",
+        checked_in_at: inserted.rows[0].checked_in_at,
+      },
+    });
   } catch (err) {
     return next(err);
   }
