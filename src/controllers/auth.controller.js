@@ -26,12 +26,19 @@ async function register(req, res, next) {
   const { full_name, username, phone, email, password, confirm_password } =
     req.body;
 
-  if (!full_name || !username || !phone || !password || !confirm_password) {
+  if (
+    !full_name ||
+    !username ||
+    !phone ||
+    !email ||
+    !password ||
+    !confirm_password
+  ) {
     return res.status(422).json({
       error: true,
       code: "validation_error",
       message:
-        "full_name, username, phone, password, and confirm_password are all required.",
+        "full_name, username, email, phone, password, and confirm_password are all required.",
     });
   }
 

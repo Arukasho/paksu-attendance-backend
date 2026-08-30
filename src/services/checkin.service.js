@@ -4,10 +4,14 @@ async function processCheckin(userId) {
   // Find today's events (is_active, not deleted), ordered soonest first.
   const eventsResult = await pool.query(
     `SELECT id, name, location, event_datetime, checkin_open_minutes, checkin_close_minutes
-     FROM events
-     WHERE is_active = true AND deleted_at IS NULL
-       AND event_datetime::date = CURRENT_DATE
-     ORDER BY event_datetime ASC`,
+   FROM events
+   WHERE deleted_at IS NULL
+     AND event_datetime::date = CURRENT_DATE
+     AND (
+       (auto_activate = true AND now() BETWEEN event_datetime - interval '3 hours' AND event_datetime + interval '3 hours')
+       OR (auto_activate = false AND is_active = true)
+     )
+   ORDER BY auto_activate ASC, event_datetime ASC`,
   );
 
   const now = new Date();

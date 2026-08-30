@@ -3,12 +3,15 @@ const pool = require("../../config/db");
 async function list(req, res, next) {
   try {
     const result = await pool.query(
-      `SELECT e.id, e.name, e.event_datetime, e.location, e.checkin_open_minutes,
-              e.checkin_close_minutes, e.is_active,
-              (SELECT COUNT(*) FROM attendance a WHERE a.event_id = e.id) AS attended_count
-       FROM events e
-       WHERE e.deleted_at IS NULL
-       ORDER BY e.event_datetime DESC`,
+      `SELECT e.id, e.name, e.event_datetime, e.location, e.checkin_open_minutes, e.checkin_close_minutes,
+          e.auto_activate,
+          CASE WHEN e.auto_activate THEN
+            (now() BETWEEN e.event_datetime - interval '2 hours' AND e.event_datetime + interval '1 hours')
+          ELSE e.is_active END AS is_active,
+          (SELECT COUNT(*) FROM attendance a WHERE a.event_id = e.id) AS attended_count
+   FROM events e
+   WHERE e.deleted_at IS NULL
+   ORDER BY e.event_datetime DESC`,
     );
     return res.status(200).json({ data: result.rows });
   } catch (err) {
@@ -26,13 +29,11 @@ async function create(req, res, next) {
   } = req.body;
 
   if (!name || !event_datetime) {
-    return res
-      .status(422)
-      .json({
-        error: true,
-        code: "validation_error",
-        message: "name and event_datetime are required.",
-      });
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "name and event_datetime are required.",
+    });
   }
 
   try {
@@ -86,14 +87,16 @@ async function update(req, res, next) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
   }
 
+  if (updates.is_active !== undefined) {
+    updates.auto_activate = false; // manual toggle always overrides auto behavior
+  }
+
   if (Object.keys(updates).length === 0) {
-    return res
-      .status(422)
-      .json({
-        error: true,
-        code: "validation_error",
-        message: "No valid fields to update.",
-      });
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "No valid fields to update.",
+    });
   }
 
   const setClauses = Object.keys(updates).map(
