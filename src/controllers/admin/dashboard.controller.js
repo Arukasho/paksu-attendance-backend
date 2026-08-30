@@ -76,6 +76,40 @@ async function eventAttendance(req, res, next) {
       [req.params.id],
     );
 
+    return res.status(200).json({
+      data: { event: eventResult.rows[0], attendees: attendeesResult.rows },
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function eventAttendanceFull(req, res, next) {
+  const { id: eventId } = req.params;
+  const search = req.query.search ? `%${req.query.search}%` : null;
+
+  try {
+    const eventResult = await pool.query(
+      "SELECT id, name FROM events WHERE id = $1",
+      [eventId],
+    );
+    if (eventResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "Event not found." });
+    }
+
+    const attendeesResult = await pool.query(
+      `SELECT u.id AS user_id, u.full_name, u.username, u.university,
+              (a.id IS NOT NULL) AS attended, a.checked_in_at
+       FROM users u
+       LEFT JOIN attendance a ON a.user_id = u.id AND a.event_id = $1
+       WHERE u.deleted_at IS NULL
+         AND ($2::text IS NULL OR u.full_name ILIKE $2 OR u.username ILIKE $2)
+       ORDER BY attended DESC, u.full_name ASC`,
+      [eventId, search],
+    );
+
     return res
       .status(200)
       .json({
@@ -86,4 +120,39 @@ async function eventAttendance(req, res, next) {
   }
 }
 
-module.exports = { summary, eventSummary, eventAttendance };
+async function manualCheckin(req, res, next) {
+  const { id: eventId, userId } = req.params;
+
+  try {
+    const existing = await pool.query(
+      "SELECT id FROM attendance WHERE user_id = $1 AND event_id = $2",
+      [userId, eventId],
+    );
+    if (existing.rows.length > 0) {
+      return res.status(200).json({ data: { status: "already_checked_in" } });
+    }
+
+    const inserted = await pool.query(
+      "INSERT INTO attendance (user_id, event_id) VALUES ($1, $2) RETURNING checked_in_at",
+      [userId, eventId],
+    );
+    return res
+      .status(201)
+      .json({
+        data: {
+          status: "success",
+          checked_in_at: inserted.rows[0].checked_in_at,
+        },
+      });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = {
+  summary,
+  eventSummary,
+  eventAttendance,
+  eventAttendanceFull,
+  manualCheckin,
+};
