@@ -8,12 +8,12 @@ const adminEventsRoutes = require("./routes/admin/events.routes");
 const adminParticipantsRoutes = require("./routes/admin/participants.routes");
 const adminDashboardRoutes = require("./routes/admin/dashboard.routes");
 
+const app = express();
+
 const Sentry = require("@sentry/node");
 Sentry.setupExpressErrorHandler(app);
 
 const errorHandler = require("./middleware/errorHandler");
-
-const app = express();
 
 app.set("trust proxy", 1);
 
