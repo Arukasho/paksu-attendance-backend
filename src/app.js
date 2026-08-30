@@ -19,8 +19,8 @@ app.set("trust proxy", 1);
 
 const allowedOrigins = [
   "https://absensi-paksu.online",
-  "https://www.absens-paksu.online",
-  "https://admin.absens-paksu.online",
+  "https://www.absensi-paksu.online",
+  "https://admin.absensi-paksu.online",
   "http://localhost:3001",
 ];
 
