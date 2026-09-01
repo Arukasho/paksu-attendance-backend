@@ -81,6 +81,25 @@ async function create(req, res, next) {
   }
 
   try {
+    const existing = await pool.query(
+      "SELECT username, phone, email FROM users WHERE username = $1 OR phone = $2 OR email = $3",
+      [username, phone, email || null],
+    );
+
+    if (existing.rows.length > 0) {
+      const conflict = existing.rows[0];
+      let code = "username_taken";
+      if (conflict.phone === phone) code = "phone_taken";
+      else if (email && conflict.email === email) code = "email_taken";
+
+      return res.status(409).json({
+        error: true,
+        code,
+        message:
+          "An account with this username, phone, or email already exists.",
+      });
+    }
+
     const password_hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
       `INSERT INTO users (full_name, username, phone, email, password_hash)
@@ -144,6 +163,42 @@ async function update(req, res, next) {
         code: "not_found",
         message: "Participant not found.",
       });
+    }
+
+    // Only re-check uniqueness for fields that are actually changing and
+    // are subject to a unique constraint.
+    if (
+      (updates.username && updates.username !== before.rows[0].username) ||
+      (updates.phone && updates.phone !== before.rows[0].phone) ||
+      (updates.email && updates.email !== before.rows[0].email)
+    ) {
+      const existing = await pool.query(
+        `SELECT username, phone, email FROM users
+         WHERE id != $1
+           AND (username = $2 OR phone = $3 OR email = $4)`,
+        [
+          req.params.id,
+          updates.username || before.rows[0].username,
+          updates.phone || before.rows[0].phone,
+          updates.email !== undefined ? updates.email : before.rows[0].email,
+        ],
+      );
+
+      if (existing.rows.length > 0) {
+        const conflict = existing.rows[0];
+        let code = "username_taken";
+        if (updates.phone && conflict.phone === updates.phone)
+          code = "phone_taken";
+        else if (updates.email && conflict.email === updates.email)
+          code = "email_taken";
+
+        return res.status(409).json({
+          error: true,
+          code,
+          message:
+            "An account with this username, phone, or email already exists.",
+        });
+      }
     }
 
     const diff = diffFields(before.rows[0], updates);

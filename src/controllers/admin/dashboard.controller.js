@@ -1,4 +1,3 @@
-// TODO: implement. See docs/api-contract.md section 7.
 const pool = require("../../config/db");
 const { logActivity } = require("../../services/activityLog.service");
 
@@ -55,11 +54,49 @@ async function summary(req, res, next) {
 }
 
 async function eventSummary(req, res, next) {
-  res.status(501).json({
-    error: true,
-    code: "not_implemented",
-    message: "event summary: TODO",
-  });
+  try {
+    const eventResult = await pool.query(
+      `SELECT id, name FROM events
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [req.params.id],
+    );
+
+    if (eventResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "Event not found." });
+    }
+
+    const event = eventResult.rows[0];
+
+    const registeredResult = await pool.query(
+      "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL",
+    );
+    const presentResult = await pool.query(
+      "SELECT COUNT(*) FROM attendance WHERE event_id = $1",
+      [event.id],
+    );
+
+    const totalRegistered = parseInt(registeredResult.rows[0].count);
+    const present = parseInt(presentResult.rows[0].count);
+    const notPresent = totalRegistered - present;
+    const attendanceRate =
+      totalRegistered > 0
+        ? Math.round((present / totalRegistered) * 1000) / 10
+        : 0;
+
+    return res.status(200).json({
+      data: {
+        event: { id: event.id, name: event.name },
+        total_registered: totalRegistered,
+        present,
+        not_present: notPresent,
+        attendance_rate: attendanceRate,
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
 }
 
 async function eventAttendance(req, res, next) {
@@ -146,6 +183,7 @@ async function manualCheckin(req, res, next) {
       "SELECT full_name FROM users WHERE id = $1",
       [userId],
     );
+
     await logActivity({
       actorType: "admin",
       actorId: req.user.id,

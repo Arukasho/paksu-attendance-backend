@@ -4,13 +4,24 @@ const {
   diffFields,
 } = require("../../services/activityLog.service");
 
+// Activity logging is best-effort: a failure here should never turn an
+// otherwise-successful request into a 500 for the client.
+async function safeLogActivity(payload) {
+  try {
+    await logActivity(payload);
+  } catch (err) {
+    console.error("logActivity failed:", err);
+  }
+}
+
 async function list(req, res, next) {
   try {
     const result = await pool.query(
       `SELECT e.id, e.name, e.event_datetime, e.location, e.checkin_open_minutes, e.checkin_close_minutes,
           e.auto_activate,
           CASE WHEN e.auto_activate THEN
-            (now() BETWEEN e.event_datetime - interval '3 hours' AND e.event_datetime + interval '3 hours')
+            (now() BETWEEN e.event_datetime - (e.checkin_open_minutes || ' minutes')::interval
+                        AND e.event_datetime + (e.checkin_close_minutes || ' minutes')::interval)
           ELSE e.is_active END AS is_active,
           (SELECT COUNT(*) FROM attendance a WHERE a.event_id = e.id) AS attended_count
    FROM events e
@@ -54,7 +65,7 @@ async function create(req, res, next) {
       ],
     );
 
-    await logActivity({
+    await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
       action: "create_event",
@@ -118,18 +129,32 @@ async function update(req, res, next) {
   );
   const values = Object.values(updates);
 
-  const before = await pool.query("SELECT * FROM events WHERE id = $1", [
-    req.params.id,
-  ]);
-  const diff = diffFields(before.rows[0], updates);
-
   try {
+    const before = await pool.query(
+      "SELECT * FROM events WHERE id = $1 AND deleted_at IS NULL",
+      [req.params.id],
+    );
+
+    if (before.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "Event not found." });
+    }
+
+    const diff = diffFields(before.rows[0], updates);
+
     const result = await pool.query(
       `UPDATE events SET ${setClauses.join(", ")} WHERE id = $1 AND deleted_at IS NULL RETURNING *`,
       [req.params.id, ...values],
     );
 
-    await logActivity({
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "Event not found." });
+    }
+
+    await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
       action: "update_event",
@@ -139,11 +164,6 @@ async function update(req, res, next) {
       details: diff,
     });
 
-    if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ error: true, code: "not_found", message: "Event not found." });
-    }
     return res.status(200).json({ data: result.rows[0] });
   } catch (err) {
     return next(err);
@@ -151,22 +171,30 @@ async function update(req, res, next) {
 }
 
 async function remove(req, res, next) {
-  const eventInfo = await pool.query("SELECT name FROM events WHERE id = $1", [
-    req.params.id,
-  ]);
-
   try {
-    await pool.query("UPDATE events SET deleted_at = now() WHERE id = $1", [
-      req.params.id,
-    ]);
+    const eventInfo = await pool.query(
+      "SELECT name FROM events WHERE id = $1 AND deleted_at IS NULL",
+      [req.params.id],
+    );
 
-    await logActivity({
+    if (eventInfo.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "Event not found." });
+    }
+
+    await pool.query(
+      "UPDATE events SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL",
+      [req.params.id],
+    );
+
+    await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
       action: "delete_event",
       targetType: "event",
       targetId: req.params.id,
-      targetLabel: eventInfo.rows[0]?.name,
+      targetLabel: eventInfo.rows[0].name,
     });
 
     return res.status(204).send();

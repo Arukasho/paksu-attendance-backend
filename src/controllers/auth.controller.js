@@ -1,7 +1,3 @@
-// TODO: implement using bcrypt (hash/compare passwords) and
-// ../services/token.service.js (issue access + refresh tokens).
-// See docs/api-contract.md section 1 for exact request/response shapes.
-
 const bcrypt = require("bcrypt");
 const pool = require("../config/db");
 
@@ -96,17 +92,17 @@ async function register(req, res, next) {
     // Step 4: issue tokens so the user is immediately logged in.
     const userResult = await pool.query(
       "SELECT role FROM users WHERE id = $1",
-      [payload.id],
+      [user.id],
     );
     if (userResult.rows.length === 0) {
-      return res.status(401).json({
+      return res.status(500).json({
         error: true,
-        code: "invalid_refresh_token",
-        message: "User not found.",
+        code: "internal_error",
+        message: "Could not load user after registration.",
       });
     }
     const access_token = signAccessToken({
-      id: payload.id,
+      id: user.id,
       role: userResult.rows[0].role,
     });
 
@@ -202,7 +198,22 @@ async function refresh(req, res, next) {
 
     await revokeRefreshToken(refresh_token); // rotation: old token is now dead
 
-    const access_token = signAccessToken({ id: payload.id, role: "attendee" });
+    const userResult = await pool.query(
+      "SELECT role FROM users WHERE id = $1",
+      [payload.id],
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({
+        error: true,
+        code: "invalid_refresh_token",
+        message: "User not found.",
+      });
+    }
+
+    const access_token = signAccessToken({
+      id: payload.id,
+      role: userResult.rows[0].role,
+    });
     const new_refresh_token = signRefreshToken({ id: payload.id });
     await storeRefreshToken(payload.id, new_refresh_token);
 
