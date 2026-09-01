@@ -1,6 +1,9 @@
 const pool = require("../../config/db");
 const bcrypt = require("bcrypt");
-const { logActivity } = require("../../services/activityLog.service");
+const {
+  logActivity,
+  diffFields,
+} = require("../../services/activityLog.service");
 
 async function list(req, res, next) {
   const search = req.query.search;

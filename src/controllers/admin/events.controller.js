@@ -1,5 +1,8 @@
 const pool = require("../../config/db");
-const { logActivity } = require("../../services/activityLog.service");
+const {
+  logActivity,
+  diffFields,
+} = require("../../services/activityLog.service");
 
 async function list(req, res, next) {
   try {
@@ -151,6 +154,7 @@ async function remove(req, res, next) {
   const eventInfo = await pool.query("SELECT name FROM events WHERE id = $1", [
     req.params.id,
   ]);
+
   try {
     await pool.query("UPDATE events SET deleted_at = now() WHERE id = $1", [
       req.params.id,
