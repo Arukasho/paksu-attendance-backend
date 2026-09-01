@@ -115,10 +115,13 @@ async function update(req, res, next) {
     "birth_place",
     "birth_date",
   ];
+
   const updates = {};
 
   for (const field of allowedFields) {
-    if (req.body[field] !== undefined) updates[field] = req.body[field];
+    if (req.body[field] !== undefined) {
+      updates[field] = req.body[field];
+    }
   }
 
   if (Object.keys(updates).length === 0) {
@@ -129,31 +132,36 @@ async function update(req, res, next) {
     });
   }
 
-  const setClauses = Object.keys(updates).map(
-    (field, i) => `${field} = $${i + 2}`,
-  );
-  const values = Object.values(updates);
-
-  const before = await pool.query("SELECT * FROM events WHERE id = $1", [
-    req.params.id,
-  ]);
-  const diff = diffFields(before.rows[0], updates);
-
   try {
-    const result = await pool.query(
-      `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1 AND deleted_at IS NULL RETURNING id, full_name, username, phone, email`,
-      [req.params.id, ...values],
+    const before = await pool.query(
+      "SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL",
+      [req.params.id],
     );
 
-    await logActivity({
-      actorType: "admin",
-      actorId: req.user.id,
-      action: "update_user",
-      targetType: "user",
-      targetId: req.params.id,
-      targetLabel: result.rows[0].full_name,
-      details: diff,
-    });
+    if (before.rows.length === 0) {
+      return res.status(404).json({
+        error: true,
+        code: "not_found",
+        message: "Participant not found.",
+      });
+    }
+
+    const diff = diffFields(before.rows[0], updates);
+
+    const setClauses = Object.keys(updates).map(
+      (field, i) => `${field} = $${i + 2}`,
+    );
+
+    const values = Object.values(updates);
+
+    const result = await pool.query(
+      `UPDATE users
+       SET ${setClauses.join(", ")}
+       WHERE id = $1
+         AND deleted_at IS NULL
+       RETURNING id, full_name, username, phone, email`,
+      [req.params.id, ...values],
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -162,6 +170,17 @@ async function update(req, res, next) {
         message: "Participant not found.",
       });
     }
+
+    await logActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      action: "update_user",
+      targetType: "user",
+      targetId: result.rows[0].id,
+      targetLabel: result.rows[0].full_name,
+      details: diff,
+    });
+
     return res.status(200).json({ data: result.rows[0] });
   } catch (err) {
     return next(err);
@@ -169,23 +188,31 @@ async function update(req, res, next) {
 }
 
 async function remove(req, res, next) {
-  const participantInfo = await pool.query(
-    "SELECT full_name FROM users WHERE id = $1",
-    [req.params.id],
-  );
-
   try {
-    await pool.query("UPDATE users SET deleted_at = now() WHERE id = $1", [
-      req.params.id,
-    ]);
+    const result = await pool.query(
+      `UPDATE users
+       SET deleted_at = now()
+       WHERE id = $1
+         AND deleted_at IS NULL
+       RETURNING id, full_name`,
+      [req.params.id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: true,
+        code: "not_found",
+        message: "Participant not found.",
+      });
+    }
 
     await logActivity({
       actorType: "admin",
       actorId: req.user.id,
       action: "delete_user",
       targetType: "user",
-      targetId: req.params.id,
-      targetLabel: participantInfo.rows[0]?.full_name,
+      targetId: result.rows[0].id,
+      targetLabel: result.rows[0].full_name,
     });
 
     return res.status(204).send();
