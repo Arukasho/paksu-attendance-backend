@@ -24,9 +24,6 @@ const UNIQUE_VIOLATION = "23505";
 
 async function list(req, res, next) {
   const search = req.query.search;
-  const page = Math.max(parseInt(req.query.page) || 1, 1);
-  const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
-  const offset = (page - 1) * limit;
 
   try {
     let query = `
@@ -43,8 +40,7 @@ async function list(req, res, next) {
       query += ` AND (u.full_name ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.phone ILIKE $${params.length} OR u.email ILIKE $${params.length})`;
     }
 
-    params.push(limit, offset);
-    query += ` ORDER BY u.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+    query += ` ORDER BY u.full_name ASC`;
 
     const result = await pool.query(query, params);
     return res.status(200).json({ data: result.rows });
