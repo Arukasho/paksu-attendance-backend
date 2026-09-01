@@ -190,10 +190,20 @@ async function remove(req, res, next) {
       [req.params.id],
     );
 
+    const userInfo = await pool.query(
+      "SELECT full_name FROM users WHERE id = $1 AND deleted_at IS NULL",
+      [req.user.id],
+    );
+    if (userInfo.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "User not found." });
+    }
+
     await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
-      actorName: req.user.full_name,
+      actorName: userInfo.rows[0].full_name,
       action: "delete_event",
       targetType: "event",
       targetId: req.params.id,

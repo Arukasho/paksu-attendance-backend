@@ -55,9 +55,20 @@ async function processCheckin(userId) {
         [userId, event.id],
       );
 
+      const userInfo = await pool.query(
+        "SELECT full_name FROM users WHERE id = $1 AND deleted_at IS NULL",
+        [userId],
+      );
+      if (userInfo.rows.length === 0) {
+        return res
+          .status(404)
+          .json({ error: true, code: "not_found", message: "User not found." });
+      }
+
       await logActivity({
         actorType: "user",
         actorId: userId,
+        actorName: userInfo.rows[0].full_name,
         action: "check_in",
         targetType: "event",
         targetId: event.id,

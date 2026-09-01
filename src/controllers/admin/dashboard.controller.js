@@ -224,7 +224,7 @@ async function manualCheckin(req, res, next) {
     await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
-      actorName: req.user.full_name,
+      actorName: userInfo.rows[0].full_name,
       action: "mark_present",
       targetType: "user",
       targetId: userId,
