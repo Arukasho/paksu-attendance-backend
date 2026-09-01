@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { logActivity } = require("./activityLog.service");
 
 async function processCheckin(userId) {
   // Find today's events (is_active, not deleted), ordered soonest first.
@@ -53,6 +54,15 @@ async function processCheckin(userId) {
         `INSERT INTO attendance (user_id, event_id) VALUES ($1, $2) RETURNING checked_in_at`,
         [userId, event.id],
       );
+
+      await logActivity({
+        actorType: "user",
+        actorId: userId,
+        action: "check_in",
+        targetType: "event",
+        targetId: event.id,
+        targetLabel: event.name,
+      });
 
       return {
         status: "success",

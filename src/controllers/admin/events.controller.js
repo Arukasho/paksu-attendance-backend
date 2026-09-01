@@ -1,4 +1,5 @@
 const pool = require("../../config/db");
+const { logActivity } = require("../../services/activityLog.service");
 
 async function list(req, res, next) {
   try {
@@ -49,6 +50,16 @@ async function create(req, res, next) {
         checkin_close_minutes || 60,
       ],
     );
+
+    await logActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      action: "create_event",
+      targetType: "event",
+      targetId: result.rows[0].id,
+      targetLabel: result.rows[0].name,
+    });
+
     return res.status(201).json({ data: result.rows[0] });
   } catch (err) {
     return next(err);
@@ -104,11 +115,27 @@ async function update(req, res, next) {
   );
   const values = Object.values(updates);
 
+  const before = await pool.query("SELECT * FROM events WHERE id = $1", [
+    req.params.id,
+  ]);
+  const diff = diffFields(before.rows[0], updates);
+
   try {
     const result = await pool.query(
       `UPDATE events SET ${setClauses.join(", ")} WHERE id = $1 AND deleted_at IS NULL RETURNING *`,
       [req.params.id, ...values],
     );
+
+    await logActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      action: "update_event",
+      targetType: "event",
+      targetId: req.params.id,
+      targetLabel: result.rows[0].name,
+      details: diff,
+    });
+
     if (result.rows.length === 0) {
       return res
         .status(404)
@@ -121,10 +148,23 @@ async function update(req, res, next) {
 }
 
 async function remove(req, res, next) {
+  const eventInfo = await pool.query("SELECT name FROM events WHERE id = $1", [
+    req.params.id,
+  ]);
   try {
     await pool.query("UPDATE events SET deleted_at = now() WHERE id = $1", [
       req.params.id,
     ]);
+
+    await logActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      action: "delete_event",
+      targetType: "event",
+      targetId: req.params.id,
+      targetLabel: eventInfo.rows[0]?.name,
+    });
+
     return res.status(204).send();
   } catch (err) {
     return next(err);

@@ -7,6 +7,7 @@ const checkinRoutes = require("./routes/checkin.routes");
 const adminEventsRoutes = require("./routes/admin/events.routes");
 const adminParticipantsRoutes = require("./routes/admin/participants.routes");
 const adminDashboardRoutes = require("./routes/admin/dashboard.routes");
+const adminActivityLogsRoutes = require("./routes/admin/activityLogs.routes");
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.use("/v1/checkin", checkinRoutes);
 app.use("/v1/admin/events", adminEventsRoutes);
 app.use("/v1/admin/participants", adminParticipantsRoutes);
 app.use("/v1/admin/dashboard", adminDashboardRoutes);
+app.use("/v1/admin/activity-logs", adminActivityLogsRoutes);
 
 // 404 fallback for unmatched routes
 app.use((req, res) => {

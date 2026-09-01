@@ -1,5 +1,6 @@
 // TODO: implement. See docs/api-contract.md section 7.
 const pool = require("../../config/db");
+const { logActivity } = require("../../services/activityLog.service");
 
 async function summary(req, res, next) {
   try {
@@ -140,6 +141,22 @@ async function manualCheckin(req, res, next) {
       "INSERT INTO attendance (user_id, event_id) VALUES ($1, $2) RETURNING checked_in_at",
       [userId, eventId],
     );
+
+    const userInfo = await pool.query(
+      "SELECT full_name FROM users WHERE id = $1",
+      [userId],
+    );
+    await logActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      actorName: req.user.full_name,
+      action: "mark_present",
+      targetType: "user",
+      targetId: userId,
+      targetLabel: userInfo.rows[0]?.full_name,
+      details: { event_id: eventId },
+    });
+
     return res.status(201).json({
       data: {
         status: "success",

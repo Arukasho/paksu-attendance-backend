@@ -4,6 +4,7 @@
 
 const bcrypt = require("bcrypt");
 const pool = require("../config/db");
+
 const {
   signAccessToken,
   signRefreshToken,
@@ -14,11 +15,14 @@ const {
   signResetToken,
   verifyResetToken,
 } = require("../services/token.service");
+
 const {
   createOtpForUser,
   verifyOtp: verifyOtpCode,
 } = require("../services/otp.service");
+
 const { sendOtpEmail } = require("../services/email.service");
+const { logActivity } = require("../services/activityLog.service");
 
 const SALT_ROUNDS = 10;
 
@@ -82,8 +86,30 @@ async function register(req, res, next) {
 
     const user = insertResult.rows[0];
 
+    await logActivity({
+      actorType: "user",
+      actorId: user.id,
+      actorName: user.full_name,
+      action: "register",
+    });
+
     // Step 4: issue tokens so the user is immediately logged in.
-    const access_token = signAccessToken({ id: user.id, role: "attendee" });
+    const userResult = await pool.query(
+      "SELECT role FROM users WHERE id = $1",
+      [payload.id],
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({
+        error: true,
+        code: "invalid_refresh_token",
+        message: "User not found.",
+      });
+    }
+    const access_token = signAccessToken({
+      id: payload.id,
+      role: userResult.rows[0].role,
+    });
+
     const refresh_token = signRefreshToken({ id: user.id });
 
     await storeRefreshToken(user.id, refresh_token);

@@ -6,6 +6,7 @@ const multer = require("multer");
 const supabase = require("../config/supabaseStorage");
 
 const { revokeAllRefreshTokensForUser } = require("../services/token.service");
+const { logActivity, diffFields } = require("../services/activityLog.service");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -77,6 +78,12 @@ async function updateMe(req, res, next) {
   );
   const values = Object.values(updates);
 
+  const before = await pool.query("SELECT * FROM users WHERE id = $1", [
+    req.user.id,
+  ]);
+
+  const diff = diffFields(before.rows[0], updates);
+
   try {
     const result = await pool.query(
       `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1
@@ -86,18 +93,28 @@ async function updateMe(req, res, next) {
     );
 
     const user = result.rows[0];
+
+    await logActivity({
+      actorType: "user",
+      actorId: req.user.id,
+      actorName: user.full_name,
+      action: "update_profile",
+      targetType: "user",
+      targetId: req.user.id,
+      targetLabel: user.full_name,
+      details: diff,
+    });
+
     return res.status(200).json({
       data: { ...user, profile_completion: calculateCompletion(user) },
     });
   } catch (err) {
     if (err.code === "23505") {
-      return res
-        .status(409)
-        .json({
-          error: true,
-          code: "email_taken",
-          message: "This email is already in use.",
-        });
+      return res.status(409).json({
+        error: true,
+        code: "email_taken",
+        message: "This email is already in use.",
+      });
     }
     return next(err);
   }

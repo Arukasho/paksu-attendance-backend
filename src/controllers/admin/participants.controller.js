@@ -1,5 +1,6 @@
 const pool = require("../../config/db");
 const bcrypt = require("bcrypt");
+const { logActivity } = require("../../services/activityLog.service");
 
 async function list(req, res, next) {
   const search = req.query.search;
@@ -83,6 +84,16 @@ async function create(req, res, next) {
        VALUES ($1, $2, $3, $4, $5) RETURNING id, full_name, username, phone, email`,
       [full_name, username, phone, email || null, password_hash],
     );
+
+    await logActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      action: "create_user",
+      targetType: "user",
+      targetId: result.rows[0].id,
+      targetLabel: result.rows[0].full_name,
+    });
+
     return res.status(201).json({ data: result.rows[0] });
   } catch (err) {
     return next(err);
@@ -120,11 +131,27 @@ async function update(req, res, next) {
   );
   const values = Object.values(updates);
 
+  const before = await pool.query("SELECT * FROM events WHERE id = $1", [
+    req.params.id,
+  ]);
+  const diff = diffFields(before.rows[0], updates);
+
   try {
     const result = await pool.query(
       `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1 AND deleted_at IS NULL RETURNING id, full_name, username, phone, email`,
       [req.params.id, ...values],
     );
+
+    await logActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      action: "update_user",
+      targetType: "user",
+      targetId: req.params.id,
+      targetLabel: result.rows[0].full_name,
+      details: diff,
+    });
+
     if (result.rows.length === 0) {
       return res.status(404).json({
         error: true,
@@ -139,10 +166,25 @@ async function update(req, res, next) {
 }
 
 async function remove(req, res, next) {
+  const participantInfo = await pool.query(
+    "SELECT full_name FROM users WHERE id = $1",
+    [req.params.id],
+  );
+
   try {
     await pool.query("UPDATE users SET deleted_at = now() WHERE id = $1", [
       req.params.id,
     ]);
+
+    await logActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      action: "delete_user",
+      targetType: "user",
+      targetId: req.params.id,
+      targetLabel: participantInfo.rows[0]?.full_name,
+    });
+
     return res.status(204).send();
   } catch (err) {
     return next(err);
