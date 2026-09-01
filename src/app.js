@@ -22,6 +22,7 @@ const allowedOrigins = [
   "https://www.absensi-paksu.online",
   "https://admin.absensi-paksu.online",
   "http://localhost:3001",
+  "http://localhost:3000",
 ];
 
 app.use(
