@@ -1,6 +1,17 @@
 const pool = require("../../config/db");
 const { logActivity } = require("../../services/activityLog.service");
 
+// Activity logging is best-effort: a failure here should never turn an
+// otherwise-successful request (e.g. a check-in that already happened)
+// into a 500 for the client.
+async function safeLogActivity(payload) {
+  try {
+    await logActivity(payload);
+  } catch (err) {
+    console.error("logActivity failed:", err);
+  }
+}
+
 async function summary(req, res, next) {
   try {
     const activeEventResult = await pool.query(
@@ -8,7 +19,8 @@ async function summary(req, res, next) {
    WHERE deleted_at IS NULL
      AND event_datetime::date = CURRENT_DATE
      AND (
-       (auto_activate = true AND now() BETWEEN event_datetime - interval '3 hours' AND event_datetime + interval '3 hours')
+       (auto_activate = true AND now() BETWEEN event_datetime - (checkin_open_minutes || ' minutes')::interval
+                                            AND event_datetime + (checkin_close_minutes || ' minutes')::interval)
        OR (auto_activate = false AND is_active = true)
      )
    ORDER BY auto_activate ASC, event_datetime ASC
@@ -102,7 +114,7 @@ async function eventSummary(req, res, next) {
 async function eventAttendance(req, res, next) {
   try {
     const eventResult = await pool.query(
-      "SELECT id, name FROM events WHERE id = $1",
+      "SELECT id, name FROM events WHERE id = $1 AND deleted_at IS NULL",
       [req.params.id],
     );
     if (eventResult.rows.length === 0) {
@@ -134,7 +146,7 @@ async function eventAttendanceFull(req, res, next) {
 
   try {
     const eventResult = await pool.query(
-      "SELECT id, name FROM events WHERE id = $1",
+      "SELECT id, name FROM events WHERE id = $1 AND deleted_at IS NULL",
       [eventId],
     );
     if (eventResult.rows.length === 0) {
@@ -166,6 +178,26 @@ async function manualCheckin(req, res, next) {
   const { id: eventId, userId } = req.params;
 
   try {
+    const eventResult = await pool.query(
+      "SELECT id FROM events WHERE id = $1 AND deleted_at IS NULL",
+      [eventId],
+    );
+    if (eventResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "Event not found." });
+    }
+
+    const userInfo = await pool.query(
+      "SELECT full_name FROM users WHERE id = $1 AND deleted_at IS NULL",
+      [userId],
+    );
+    if (userInfo.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "User not found." });
+    }
+
     const existing = await pool.query(
       "SELECT id FROM attendance WHERE user_id = $1 AND event_id = $2",
       [userId, eventId],
@@ -174,24 +206,29 @@ async function manualCheckin(req, res, next) {
       return res.status(200).json({ data: { status: "already_checked_in" } });
     }
 
+    // ON CONFLICT guards the race between the check above and this insert
+    // when two check-in requests for the same user land concurrently.
+    // Requires a unique constraint on (user_id, event_id) in the attendance table.
     const inserted = await pool.query(
-      "INSERT INTO attendance (user_id, event_id) VALUES ($1, $2) RETURNING checked_in_at",
+      `INSERT INTO attendance (user_id, event_id) VALUES ($1, $2)
+       ON CONFLICT (user_id, event_id) DO NOTHING
+       RETURNING checked_in_at`,
       [userId, eventId],
     );
 
-    const userInfo = await pool.query(
-      "SELECT full_name FROM users WHERE id = $1",
-      [userId],
-    );
+    if (inserted.rows.length === 0) {
+      // Lost the race to a concurrent check-in; treat it the same as already-checked-in.
+      return res.status(200).json({ data: { status: "already_checked_in" } });
+    }
 
-    await logActivity({
+    await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
       actorName: req.user.full_name,
       action: "mark_present",
       targetType: "user",
       targetId: userId,
-      targetLabel: userInfo.rows[0]?.full_name,
+      targetLabel: userInfo.rows[0].full_name,
       details: { event_id: eventId },
     });
 

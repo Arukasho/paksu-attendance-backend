@@ -5,10 +5,27 @@ const {
   diffFields,
 } = require("../../services/activityLog.service");
 
+// Activity logging is best-effort: a failure here should never turn an
+// otherwise-successful create/update/delete into a 500 for the client.
+async function safeLogActivity(payload) {
+  try {
+    await logActivity(payload);
+  } catch (err) {
+    console.error("logActivity failed:", err);
+  }
+}
+
+// Postgres unique_violation. Used as a defense-in-depth backstop for the
+// check-then-write race between the uniqueness SELECT and the INSERT/UPDATE
+// below: if two concurrent requests both pass the check, the DB constraint
+// (not this code) is what actually prevents the duplicate, so we translate
+// that low-level error into the same clean 409 the pre-check normally returns.
+const UNIQUE_VIOLATION = "23505";
+
 async function list(req, res, next) {
   const search = req.query.search;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const page = Math.max(parseInt(req.query.page) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
   const offset = (page - 1) * limit;
 
   try {
@@ -107,9 +124,10 @@ async function create(req, res, next) {
       [full_name, username, phone, email || null, password_hash],
     );
 
-    await logActivity({
+    await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
+      actorName: req.user.full_name,
       action: "create_user",
       targetType: "user",
       targetId: result.rows[0].id,
@@ -118,6 +136,14 @@ async function create(req, res, next) {
 
     return res.status(201).json({ data: result.rows[0] });
   } catch (err) {
+    if (err.code === UNIQUE_VIOLATION) {
+      return res.status(409).json({
+        error: true,
+        code: "conflict",
+        message:
+          "An account with this username, phone, or email already exists.",
+      });
+    }
     return next(err);
   }
 }
@@ -226,9 +252,10 @@ async function update(req, res, next) {
       });
     }
 
-    await logActivity({
+    await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
+      actorName: req.user.full_name,
       action: "update_user",
       targetType: "user",
       targetId: result.rows[0].id,
@@ -238,6 +265,14 @@ async function update(req, res, next) {
 
     return res.status(200).json({ data: result.rows[0] });
   } catch (err) {
+    if (err.code === UNIQUE_VIOLATION) {
+      return res.status(409).json({
+        error: true,
+        code: "conflict",
+        message:
+          "An account with this username, phone, or email already exists.",
+      });
+    }
     return next(err);
   }
 }
@@ -261,9 +296,10 @@ async function remove(req, res, next) {
       });
     }
 
-    await logActivity({
+    await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
+      actorName: req.user.full_name,
       action: "delete_user",
       targetType: "user",
       targetId: result.rows[0].id,

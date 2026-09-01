@@ -68,6 +68,7 @@ async function create(req, res, next) {
     await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
+      actorName: req.user.full_name,
       action: "create_event",
       targetType: "event",
       targetId: result.rows[0].id,
@@ -157,6 +158,7 @@ async function update(req, res, next) {
     await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
+      actorName: req.user.full_name,
       action: "update_event",
       targetType: "event",
       targetId: req.params.id,
@@ -191,6 +193,7 @@ async function remove(req, res, next) {
     await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
+      actorName: req.user.full_name,
       action: "delete_event",
       targetType: "event",
       targetId: req.params.id,

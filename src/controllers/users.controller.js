@@ -8,17 +8,45 @@ const supabase = require("../config/supabaseStorage");
 const { revokeAllRefreshTokensForUser } = require("../services/token.service");
 const { logActivity, diffFields } = require("../services/activityLog.service");
 
+// Activity logging is best-effort: a failure here should never turn an
+// otherwise-successful update into a 500 for the client.
+async function safeLogActivity(payload) {
+  try {
+    await logActivity(payload);
+  } catch (err) {
+    console.error("logActivity failed:", err);
+  }
+}
+
+// Only these are accepted as actual profile photos. Extension is derived
+// from this map (never from client-supplied originalname) so a renamed
+// file (e.g. "evil.sh" sent as "photo.jpg") can't smuggle an unexpected
+// type through, and so the stored key is predictable.
+const ALLOWED_PHOTO_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-}); // 5MB max
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_PHOTO_MIME_TYPES.has(file.mimetype)) {
+      const err = new Error("Only JPEG, PNG, or WebP images are allowed.");
+      err.code = "invalid_file_type";
+      return cb(err);
+    }
+    cb(null, true);
+  },
+});
 
 async function getMe(req, res, next) {
   try {
     const result = await pool.query(
       `SELECT id, full_name, username, phone, email, profile_photo_url,
               university, stambuk, domicile_address, birth_place, birth_date, created_at
-       FROM users WHERE id = $1`,
+       FROM users WHERE id = $1 AND deleted_at IS NULL`,
       [req.user.id],
     );
     if (result.rows.length === 0) {
@@ -78,15 +106,22 @@ async function updateMe(req, res, next) {
   );
   const values = Object.values(updates);
 
-  const before = await pool.query("SELECT * FROM users WHERE id = $1", [
-    req.user.id,
-  ]);
-
-  const diff = diffFields(before.rows[0], updates);
-
   try {
+    const before = await pool.query(
+      "SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL",
+      [req.user.id],
+    );
+
+    if (before.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, code: "not_found", message: "User not found." });
+    }
+
+    const diff = diffFields(before.rows[0], updates);
+
     const result = await pool.query(
-      `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1
+      `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1 AND deleted_at IS NULL
        RETURNING id, full_name, username, phone, email, profile_photo_url,
                  university, stambuk, domicile_address, birth_place, birth_date`,
       [req.user.id, ...values],
@@ -94,7 +129,7 @@ async function updateMe(req, res, next) {
 
     const user = result.rows[0];
 
-    await logActivity({
+    await safeLogActivity({
       actorType: "user",
       actorId: req.user.id,
       actorName: user.full_name,
@@ -129,8 +164,20 @@ async function uploadPhoto(req, res, next) {
     });
   }
 
-  const fileExt = req.file.originalname.split(".").pop();
-  const filePath = `${req.user.id}.${fileExt}`;
+  // Belt-and-suspenders: fileFilter should already have rejected this
+  // upstream, but don't trust wiring elsewhere to have applied it.
+  if (!ALLOWED_PHOTO_MIME_TYPES.has(req.file.mimetype)) {
+    return res.status(422).json({
+      error: true,
+      code: "invalid_file_type",
+      message: "Only JPEG, PNG, or WebP images are allowed.",
+    });
+  }
+
+  // Fixed key per user, with no extension in the path: re-uploading in a
+  // different format still overwrites the same storage object instead of
+  // leaving the previous file behind as an orphan.
+  const filePath = `${req.user.id}`;
 
   try {
     const { error: uploadError } = await supabase.storage
@@ -147,10 +194,10 @@ async function uploadPhoto(req, res, next) {
       .getPublicUrl(filePath);
     const photoUrl = publicUrlData.publicUrl;
 
-    await pool.query("UPDATE users SET profile_photo_url = $1 WHERE id = $2", [
-      photoUrl,
-      req.user.id,
-    ]);
+    await pool.query(
+      "UPDATE users SET profile_photo_url = $1 WHERE id = $2 AND deleted_at IS NULL",
+      [photoUrl, req.user.id],
+    );
 
     return res.status(200).json({ data: { profile_photo_url: photoUrl } });
   } catch (err) {
@@ -159,8 +206,8 @@ async function uploadPhoto(req, res, next) {
 }
 
 async function getAttendanceHistory(req, res, next) {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const page = Math.max(parseInt(req.query.page) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
   const offset = (page - 1) * limit;
 
   try {
@@ -199,6 +246,7 @@ async function logoutAllDevices(req, res, next) {
 }
 
 module.exports = {
+  upload,
   getMe,
   updateMe,
   uploadPhoto,
