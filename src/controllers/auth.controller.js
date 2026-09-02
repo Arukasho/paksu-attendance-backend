@@ -104,6 +104,7 @@ async function register(req, res, next) {
     const access_token = signAccessToken({
       id: user.id,
       role: userResult.rows[0].role,
+      full_name: user.full_name,
     });
 
     const refresh_token = signRefreshToken({ id: user.id });
@@ -158,7 +159,11 @@ async function login(req, res, next) {
       });
     }
 
-    const access_token = signAccessToken({ id: user.id, role: user.role });
+    const access_token = signAccessToken({
+      id: user.id,
+      role: user.role,
+      full_name: user.full_name,
+    });
     const refresh_token = signRefreshToken({ id: user.id });
 
     await storeRefreshToken(user.id, refresh_token);
@@ -199,7 +204,7 @@ async function refresh(req, res, next) {
     await revokeRefreshToken(refresh_token); // rotation: old token is now dead
 
     const userResult = await pool.query(
-      "SELECT role FROM users WHERE id = $1",
+      "SELECT role, full_name FROM users WHERE id = $1",
       [payload.id],
     );
     if (userResult.rows.length === 0) {
@@ -213,6 +218,7 @@ async function refresh(req, res, next) {
     const access_token = signAccessToken({
       id: payload.id,
       role: userResult.rows[0].role,
+      full_name: userResult.rows[0].full_name,
     });
     const new_refresh_token = signRefreshToken({ id: payload.id });
     await storeRefreshToken(payload.id, new_refresh_token);

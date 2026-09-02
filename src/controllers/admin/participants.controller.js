@@ -27,7 +27,7 @@ async function list(req, res, next) {
 
   try {
     let query = `
-      SELECT u.id, u.full_name, u.username, u.phone, u.email, u.university,
+      SELECT u.id, u.full_name, u.username, u.phone, u.email, u.university, u.role,
             u.stambuk, u.domicile_address, u.birth_place, u.birth_date,
             (SELECT COUNT(*) FROM attendance a WHERE a.user_id = u.id) AS events_attended
       FROM users u
@@ -120,20 +120,10 @@ async function create(req, res, next) {
       [full_name, username, phone, email || null, password_hash],
     );
 
-    const userInfo = await pool.query(
-      "SELECT full_name FROM users WHERE id = $1 AND deleted_at IS NULL",
-      [req.user.id],
-    );
-    if (userInfo.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ error: true, code: "not_found", message: "User not found." });
-    }
-
     await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
-      actorName: userInfo.rows[0].full_name,
+      actorName: req.user.full_name,
       action: "create_user",
       targetType: "user",
       targetId: result.rows[0].id,
@@ -258,21 +248,11 @@ async function update(req, res, next) {
       });
     }
 
-    const userInfo = await pool.query(
-      "SELECT full_name FROM users WHERE id = $1 AND deleted_at IS NULL",
-      [req.user.id],
-    );
-    if (userInfo.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ error: true, code: "not_found", message: "User not found." });
-    }
-
     await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
-      actorName: userInfo.rows[0].full_name,
-      action: "update_user",
+      actorName: req.user.full_name,
+      action: "update_participant",
       targetType: "user",
       targetId: result.rows[0].id,
       targetLabel: result.rows[0].full_name,
@@ -295,41 +275,46 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    const result = await pool.query(
-      `UPDATE users
-       SET deleted_at = now()
-       WHERE id = $1
-         AND deleted_at IS NULL
-       RETURNING id, full_name`,
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({
+        error: true,
+        code: "cannot_delete_self",
+        message: "You cannot delete your own account.",
+      });
+    }
+
+    const target = await pool.query(
+      "SELECT role, full_name FROM users WHERE id = $1",
       [req.params.id],
     );
-
-    if (result.rows.length === 0) {
+    if (target.rows.length === 0) {
       return res.status(404).json({
         error: true,
         code: "not_found",
         message: "Participant not found.",
       });
     }
-
-    const userInfo = await pool.query(
-      "SELECT full_name FROM users WHERE id = $1 AND deleted_at IS NULL",
-      [req.user.id],
-    );
-    if (userInfo.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ error: true, code: "not_found", message: "User not found." });
+    if (target.rows[0].role === "admin") {
+      return res.status(400).json({
+        error: true,
+        code: "cannot_delete_admin",
+        message:
+          "This account is an admin. Revoke admin status before deleting.",
+      });
     }
+
+    await pool.query("UPDATE users SET deleted_at = now() WHERE id = $1", [
+      req.params.id,
+    ]);
 
     await safeLogActivity({
       actorType: "admin",
       actorId: req.user.id,
-      actorName: userInfo.rows[0].full_name,
-      action: "delete_user",
+      actorName: req.user.full_name,
+      action: "delete_participant",
       targetType: "user",
-      targetId: result.rows[0].id,
-      targetLabel: result.rows[0].full_name,
+      targetId: req.params.id,
+      targetLabel: target.rows[0].full_name,
     });
 
     return res.status(204).send();
@@ -338,4 +323,74 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { list, getOne, create, update, remove };
+async function changeRole(req, res, next) {
+  const { role } = req.body;
+  if (!["admin", "attendee"].includes(role)) {
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: 'role must be "admin" or "attendee".',
+    });
+  }
+
+  if (req.params.id === req.user.id) {
+    return res.status(400).json({
+      error: true,
+      code: "cannot_change_own_role",
+      message: "You cannot change your own admin status.",
+    });
+  }
+
+  try {
+    const target = await pool.query(
+      "SELECT full_name, role FROM users WHERE id = $1 AND deleted_at IS NULL",
+      [req.params.id],
+    );
+    if (target.rows.length === 0) {
+      return res.status(404).json({
+        error: true,
+        code: "not_found",
+        message: "Participant not found.",
+      });
+    }
+
+    if (role === "admin" && target.rows[0].role !== "admin") {
+      const maxSetting = await pool.query(
+        "SELECT value FROM app_settings WHERE key = 'max_admins'",
+      );
+      const maxAdmins = parseInt(maxSetting.rows[0]?.value || "5");
+
+      const countResult = await pool.query(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND deleted_at IS NULL",
+      );
+      if (parseInt(countResult.rows[0].count) >= maxAdmins) {
+        return res.status(403).json({
+          error: true,
+          code: "max_admins_reached",
+          message: `Maximum number of admins (${maxAdmins}) already reached.`,
+        });
+      }
+    }
+
+    const result = await pool.query(
+      "UPDATE users SET role = $1 WHERE id = $2 RETURNING id, full_name, role",
+      [role, req.params.id],
+    );
+
+    await safeLogActivity({
+      actorType: "admin",
+      actorId: req.user.id,
+      actorName: req.user.full_name,
+      action: role === "admin" ? "promote_admin" : "revoke_admin",
+      targetType: "user",
+      targetId: req.params.id,
+      targetLabel: target.rows[0].full_name,
+    });
+
+    return res.status(200).json({ data: result.rows[0] });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { list, getOne, create, update, remove, changeRole };
