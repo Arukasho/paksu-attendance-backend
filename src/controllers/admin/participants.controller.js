@@ -22,6 +22,11 @@ async function safeLogActivity(payload) {
 // that low-level error into the same clean 409 the pre-check normally returns.
 const UNIQUE_VIOLATION = "23505";
 
+// Postgres check_violation. Fires e.g. if marriage_status is sent as
+// something other than 'single'/'married' — translated to a 422 instead
+// of falling through to a raw 500.
+const CHECK_VIOLATION = "23514";
+
 async function list(req, res, next) {
   const search = req.query.search;
 
@@ -29,6 +34,7 @@ async function list(req, res, next) {
     let query = `
       SELECT u.id, u.full_name, u.username, u.phone, u.email, u.university, u.role,
             u.stambuk, u.domicile_address, u.birth_place, u.birth_date,
+            u.ktb_has, u.want_join_ktb, u.serve_as, u.serve_as_other, u.marriage_status,
             (SELECT COUNT(*) FROM attendance a WHERE a.user_id = u.id) AS events_attended
       FROM users u
       WHERE u.deleted_at IS NULL
@@ -52,7 +58,7 @@ async function list(req, res, next) {
 async function getOne(req, res, next) {
   try {
     const userResult = await pool.query(
-      `SELECT id, full_name, username, phone, email, university, stambuk, domicile_address, birth_place, birth_date
+      `SELECT id, full_name, username, phone, email, university, stambuk, domicile_address, birth_place, birth_date, ktb_has, want_join_ktb, serve_as, serve_as_other, marriage_status
        FROM users WHERE id = $1 AND deleted_at IS NULL`,
       [req.params.id],
     );
@@ -155,6 +161,11 @@ async function update(req, res, next) {
     "domicile_address",
     "birth_place",
     "birth_date",
+    "ktb_has",
+    "want_join_ktb",
+    "serve_as",
+    "serve_as_other",
+    "marriage_status",
   ];
 
   const updates = {};
@@ -236,7 +247,7 @@ async function update(req, res, next) {
        SET ${setClauses.join(", ")}
        WHERE id = $1
          AND deleted_at IS NULL
-       RETURNING id, full_name, username, phone, email`,
+       RETURNING id, full_name, username, phone, email, university, stambuk, domicile_address, birth_place, birth_date, ktb_has, want_join_ktb, serve_as, serve_as_other, marriage_status`,
       [req.params.id, ...values],
     );
 
@@ -269,6 +280,14 @@ async function update(req, res, next) {
           "An account with this username, phone, or email already exists.",
       });
     }
+    if (err.code === CHECK_VIOLATION) {
+      return res.status(422).json({
+        error: true,
+        code: "validation_error",
+        message:
+          "One or more fields have an invalid value (e.g. marriage_status must be 'single' or 'married').",
+      });
+    }
     return next(err);
   }
 }
@@ -284,7 +303,7 @@ async function remove(req, res, next) {
     }
 
     const target = await pool.query(
-      "SELECT role, full_name FROM users WHERE id = $1",
+      "SELECT role, full_name FROM users WHERE id = $1 AND deleted_at IS NULL",
       [req.params.id],
     );
     if (target.rows.length === 0) {
@@ -303,9 +322,10 @@ async function remove(req, res, next) {
       });
     }
 
-    await pool.query("UPDATE users SET deleted_at = now() WHERE id = $1", [
-      req.params.id,
-    ]);
+    await pool.query(
+      "UPDATE users SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL",
+      [req.params.id],
+    );
 
     await safeLogActivity({
       actorType: "admin",

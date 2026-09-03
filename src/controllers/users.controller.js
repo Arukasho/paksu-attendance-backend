@@ -45,7 +45,7 @@ async function getMe(req, res, next) {
   try {
     const result = await pool.query(
       `SELECT id, full_name, username, phone, email, profile_photo_url,
-              university, stambuk, domicile_address, birth_place, birth_date, created_at
+              university, stambuk, domicile_address, birth_place, birth_date, ktb_has, want_join_ktb, serve_as, serve_as_other, marriage_status, created_at
        FROM users WHERE id = $1 AND deleted_at IS NULL`,
       [req.user.id],
     );
@@ -71,6 +71,10 @@ function calculateCompletion(user) {
     "birth_place",
     "birth_date",
     "profile_photo_url",
+    "ktb_has",
+    "want_join_ktb",
+    "serve_as" || "serve_as_other",
+    "marriage_status",
   ];
   const filled = fields.filter(
     (f) => user[f] !== null && user[f] !== undefined && user[f] !== "",
@@ -86,6 +90,11 @@ async function updateMe(req, res, next) {
     "birth_place",
     "birth_date",
     "email",
+    "ktb_has",
+    "want_join_ktb",
+    "serve_as",
+    "serve_as_other",
+    "marriage_status",
   ];
   const updates = {};
 
@@ -123,7 +132,7 @@ async function updateMe(req, res, next) {
     const result = await pool.query(
       `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1 AND deleted_at IS NULL
        RETURNING id, full_name, username, phone, email, profile_photo_url,
-                 university, stambuk, domicile_address, birth_place, birth_date`,
+                 university, stambuk, domicile_address, birth_place, birth_date, ktb_has, want_join_ktb, serve_as, serve_as_other, marriage_status`,
       [req.user.id, ...values],
     );
 
@@ -212,12 +221,14 @@ async function getAttendanceHistory(req, res, next) {
 
   try {
     const result = await pool.query(
-      `SELECT e.id AS event_id, e.name AS event_name, e.event_datetime, e.location, a.checked_in_at
-       FROM attendance a
-       JOIN events e ON e.id = a.event_id
-       WHERE a.user_id = $1
-       ORDER BY a.checked_in_at DESC
-       LIMIT $2 OFFSET $3`,
+      `SELECT e.id AS event_id, e.name AS event_name, e.event_datetime, e.location, 
+          a.checked_in_at, a.already_fill_form,
+          COUNT(*) OVER() AS total_count
+   FROM attendance a
+   JOIN events e ON e.id = a.event_id
+   WHERE a.user_id = $1
+   ORDER BY a.checked_in_at DESC
+   LIMIT $2 OFFSET $3`,
       [req.user.id, limit, offset],
     );
 
