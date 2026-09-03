@@ -81,12 +81,9 @@ function calculateCompletion(user) {
   ).length;
 
   const hasServiceRole =
-    (user.serve_as !== null &&
-      user.serve_as !== undefined &&
-      user.serve_as !== "") ||
-    (user.serve_as_other !== null &&
-      user.serve_as_other !== undefined &&
-      user.serve_as_other !== "");
+    (Array.isArray(user.serve_as) && user.serve_as.length > 0) ||
+    (typeof user.serve_as_other === "string" &&
+      user.serve_as_other.trim() !== "");
 
   const totalFields = fields.length + 1;
   const completedFields = filled + (hasServiceRole ? 1 : 0);
