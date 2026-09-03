@@ -73,13 +73,25 @@ function calculateCompletion(user) {
     "profile_photo_url",
     "ktb_has",
     "want_join_ktb",
-    "serve_as" || "serve_as_other",
     "marriage_status",
   ];
+
   const filled = fields.filter(
     (f) => user[f] !== null && user[f] !== undefined && user[f] !== "",
   ).length;
-  return Math.round((filled / fields.length) * 100);
+
+  const hasServiceRole =
+    (user.serve_as !== null &&
+      user.serve_as !== undefined &&
+      user.serve_as !== "") ||
+    (user.serve_as_other !== null &&
+      user.serve_as_other !== undefined &&
+      user.serve_as_other !== "");
+
+  const totalFields = fields.length + 1;
+  const completedFields = filled + (hasServiceRole ? 1 : 0);
+
+  return Math.round((completedFields / totalFields) * 100);
 }
 
 async function updateMe(req, res, next) {
