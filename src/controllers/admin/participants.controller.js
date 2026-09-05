@@ -1,3 +1,5 @@
+import { prepareJsonbFields } from "../../utils/validators";
+
 const pool = require("../../config/db");
 const bcrypt = require("bcrypt");
 const {
@@ -238,6 +240,8 @@ async function update(req, res, next) {
     }
 
     const diff = diffFields(before.rows[0], updates);
+
+    prepareJsonbFields(updates, ["serve_as"]);
 
     const setClauses = Object.keys(updates).map(
       (field, i) => `${field} = $${i + 2}`,

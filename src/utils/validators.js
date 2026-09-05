@@ -11,7 +11,20 @@ function isValidPhone(phone) {
 }
 
 function isStrongEnoughPassword(password) {
-  return typeof password === 'string' && password.length >= 8;
+  return typeof password === "string" && password.length >= 8;
 }
 
-module.exports = { isValidEmail, isValidPhone, isStrongEnoughPassword };
+function prepareJsonbFields(updates, jsonbFields) {
+  for (const field of jsonbFields) {
+    if (updates[field] !== undefined) {
+      updates[field] = JSON.stringify(updates[field]);
+    }
+  }
+}
+
+module.exports = {
+  isValidEmail,
+  isValidPhone,
+  isStrongEnoughPassword,
+  prepareJsonbFields,
+};
