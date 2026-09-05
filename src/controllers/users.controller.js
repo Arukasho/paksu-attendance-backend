@@ -82,6 +82,9 @@ function calculateCompletion(user) {
 
   const hasServiceRole =
     (Array.isArray(user.serve_as) && user.serve_as.length > 0) ||
+    (typeof user.serve_as === "string" &&
+      user.serve_as.trim() !== "" &&
+      user.serve_as !== "{}") ||
     (typeof user.serve_as_other === "string" &&
       user.serve_as_other.trim() !== "");
 
