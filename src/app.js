@@ -17,6 +17,8 @@ Sentry.setupExpressErrorHandler(app);
 const errorHandler = require("./middleware/errorHandler");
 
 app.set("trust proxy", 1);
+const { generalLimiter } = require("./middleware/rateLimiter");
+app.use(generalLimiter);
 
 const allowedOrigins = [
   "https://absensi-paksu.online",

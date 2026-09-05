@@ -5,6 +5,11 @@ const {
   diffFields,
 } = require("../../services/activityLog.service");
 const { prepareJsonbFields } = require("../../utils/validators");
+const {
+  isValidEmail,
+  isValidPhone,
+  isStrongEnoughPassword,
+} = require("../utils/validators");
 
 // Activity logging is best-effort: a failure here should never turn an
 // otherwise-successful create/update/delete into a 500 for the client.
@@ -103,6 +108,28 @@ async function create(req, res, next) {
     });
   }
 
+  if (!isValidEmail(email)) {
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Please enter a valid email address.",
+    });
+  }
+  if (!isValidPhone(phone)) {
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Please enter a valid phone number.",
+    });
+  }
+  if (!isStrongEnoughPassword(password)) {
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Password must be at least 8 characters.",
+    });
+  }
+
   try {
     const existing = await pool.query(
       "SELECT username, phone, email FROM users WHERE username = $1 OR phone = $2 OR email = $3",
@@ -178,6 +205,25 @@ async function update(req, res, next) {
     if (req.body[field] !== undefined) {
       updates[field] = req.body[field];
     }
+  }
+
+  if (updates.email !== undefined && !isValidEmail(updates.email)) {
+    return res
+      .status(422)
+      .json({
+        error: true,
+        code: "validation_error",
+        message: "Please enter a valid email address.",
+      });
+  }
+  if (updates.phone !== undefined && !isValidPhone(updates.phone)) {
+    return res
+      .status(422)
+      .json({
+        error: true,
+        code: "validation_error",
+        message: "Please enter a valid phone number.",
+      });
   }
 
   if (Object.keys(updates).length === 0) {

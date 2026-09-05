@@ -8,6 +8,7 @@ const { prepareJsonbFields } = require("../utils/validators");
 
 const { revokeAllRefreshTokensForUser } = require("../services/token.service");
 const { logActivity, diffFields } = require("../services/activityLog.service");
+const { isValidEmail } = require("../utils/validators");
 
 // Activity logging is best-effort: a failure here should never turn an
 // otherwise-successful update into a 500 for the client.
@@ -113,6 +114,16 @@ async function updateMe(req, res, next) {
 
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+
+  if (updates.email !== undefined && !isValidEmail(updates.email)) {
+    return res
+      .status(422)
+      .json({
+        error: true,
+        code: "validation_error",
+        message: "Please enter a valid email address.",
+      });
   }
 
   prepareJsonbFields(updates, ["serve_as"]);

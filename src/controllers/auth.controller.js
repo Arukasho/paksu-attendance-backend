@@ -1,5 +1,10 @@
 const bcrypt = require("bcrypt");
 const pool = require("../config/db");
+const {
+  isValidEmail,
+  isValidPhone,
+  isStrongEnoughPassword,
+} = require("../utils/validators");
 
 const {
   signAccessToken,
@@ -42,6 +47,28 @@ async function register(req, res, next) {
     });
   }
 
+  if (!isValidEmail(email)) {
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Please enter a valid email address.",
+    });
+  }
+  if (!isValidPhone(phone)) {
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Please enter a valid phone number.",
+    });
+  }
+  if (!isStrongEnoughPassword(password)) {
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Password must be at least 8 characters.",
+    });
+  }
+
   if (password !== confirm_password) {
     return res.status(422).json({
       error: true,
@@ -70,7 +97,6 @@ async function register(req, res, next) {
       });
     }
 
-    // Step 3: hash the password, insert the new user.
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
 
     const insertResult = await pool.query(
@@ -320,6 +346,14 @@ async function resetPassword(req, res, next) {
       error: true,
       code: "validation_error",
       message: "Passwords do not match.",
+    });
+  }
+
+  if (!isStrongEnoughPassword(new_password)) {
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Password must be at least 8 characters.",
     });
   }
 
