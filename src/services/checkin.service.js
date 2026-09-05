@@ -52,7 +52,7 @@ async function processCheckin(userId) {
       }
 
       const inserted = await pool.query(
-        `INSERT INTO attendance (user_id, event_id) VALUES ($1, $2) RETURNING checked_in_at`,
+        `INSERT INTO attendance (user_id, event_id) VALUES ($1, $2) RETURNING checked_in_at, already_fill_form`,
         [userId, event.id],
       );
 
@@ -80,7 +80,7 @@ async function processCheckin(userId) {
         status: "success",
         event: publicEvent(event),
         checked_in_at: inserted.rows[0].checked_in_at,
-        already_fill_form: false, // Default to false; the client can call the markFormFilled endpoint to update this.
+        already_fill_form: inserted.rows[0].already_fill_form,
       };
     }
 

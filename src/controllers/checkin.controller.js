@@ -24,19 +24,11 @@ async function checkin(req, res, next) {
 
 async function markFormFilled(req, res, next) {
   const { eventId } = req.params;
-
   try {
-    const result = await pool.query(
-      "UPDATE attendance SET already_fill_form = true WHERE user_id = $1 AND event_id = $2 RETURNING id",
+    await pool.query(
+      "UPDATE attendance SET already_fill_form = true WHERE user_id = $1 AND event_id = $2",
       [req.user.id, eventId],
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        error: true,
-        code: "not_found",
-        message: "No attendance record found for this event.",
-      });
-    }
     return res.status(200).json({ data: { status: "success" } });
   } catch (err) {
     return next(err);
