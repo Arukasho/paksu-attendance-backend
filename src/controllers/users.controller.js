@@ -114,6 +114,10 @@ async function updateMe(req, res, next) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
   }
 
+  if (updates.serve_as !== undefined) {
+    updates.serve_as = JSON.stringify(updates.serve_as);
+  }
+
   if (Object.keys(updates).length === 0) {
     return res.status(422).json({
       error: true,
@@ -140,10 +144,6 @@ async function updateMe(req, res, next) {
     }
 
     const diff = diffFields(before.rows[0], updates);
-
-    if (updates.serve_as !== undefined) {
-      updates.serve_as = JSON.stringify(updates.serve_as);
-    }
 
     const result = await pool.query(
       `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1 AND deleted_at IS NULL
