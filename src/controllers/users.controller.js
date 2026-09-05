@@ -4,7 +4,7 @@
 const pool = require("../config/db");
 const multer = require("multer");
 const supabase = require("../config/supabaseStorage");
-const prepareJsonbFields = require("../utils/validators");
+const { prepareJsonbFields } = require("../utils/validators");
 
 const { revokeAllRefreshTokensForUser } = require("../services/token.service");
 const { logActivity, diffFields } = require("../services/activityLog.service");

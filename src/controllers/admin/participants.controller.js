@@ -1,11 +1,10 @@
-const prepareJsonbFields = require("../../utils/validators");
-
 const pool = require("../../config/db");
 const bcrypt = require("bcrypt");
 const {
   logActivity,
   diffFields,
 } = require("../../services/activityLog.service");
+const { prepareJsonbFields } = require("../../utils/validators");
 
 // Activity logging is best-effort: a failure here should never turn an
 // otherwise-successful create/update/delete into a 500 for the client.
