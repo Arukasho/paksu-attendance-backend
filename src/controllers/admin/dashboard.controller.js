@@ -157,7 +157,7 @@ async function eventAttendanceFull(req, res, next) {
 
     const attendeesResult = await pool.query(
       `SELECT u.id AS user_id, u.full_name, u.username, u.university,
-              (a.id IS NOT NULL) AS attended, a.checked_in_at
+              (a.id IS NOT NULL) AS attended, a.checked_in_at, a.already_fill_form
        FROM users u
        LEFT JOIN attendance a ON a.user_id = u.id AND a.event_id = $1
        WHERE u.deleted_at IS NULL
