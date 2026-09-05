@@ -58,7 +58,7 @@ async function list(req, res, next) {
 async function getOne(req, res, next) {
   try {
     const userResult = await pool.query(
-      `SELECT id, full_name, username, phone, email, university, stambuk, domicile_address, birth_place, birth_date, ktb_has, want_join_ktb, serve_as, serve_as_other, marriage_status
+      `SELECT id, full_name, username, phone, email, university, stambuk, domicile_address, birth_place, birth_date, ktb_has, want_join_ktb, serve_as, serve_as_other, marriage_status, role
        FROM users WHERE id = $1 AND deleted_at IS NULL`,
       [req.params.id],
     );
