@@ -4,12 +4,12 @@ const {
   logActivity,
   diffFields,
 } = require("../../services/activityLog.service");
-const { prepareJsonbFields } = require("../../utils/validators");
 const {
   isValidEmail,
   isValidPhone,
   isStrongEnoughPassword,
-} = require("../utils/validators");
+  prepareJsonbFields,
+} = require("../../utils/validators");
 
 // Activity logging is best-effort: a failure here should never turn an
 // otherwise-successful create/update/delete into a 500 for the client.
@@ -208,22 +208,18 @@ async function update(req, res, next) {
   }
 
   if (updates.email !== undefined && !isValidEmail(updates.email)) {
-    return res
-      .status(422)
-      .json({
-        error: true,
-        code: "validation_error",
-        message: "Please enter a valid email address.",
-      });
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Please enter a valid email address.",
+    });
   }
   if (updates.phone !== undefined && !isValidPhone(updates.phone)) {
-    return res
-      .status(422)
-      .json({
-        error: true,
-        code: "validation_error",
-        message: "Please enter a valid phone number.",
-      });
+    return res.status(422).json({
+      error: true,
+      code: "validation_error",
+      message: "Please enter a valid phone number.",
+    });
   }
 
   if (Object.keys(updates).length === 0) {
