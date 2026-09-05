@@ -1,4 +1,4 @@
-import { prepareJsonbFields } from "../../utils/validators";
+const prepareJsonbFields = require("../../utils/validators");
 
 const pool = require("../../config/db");
 const bcrypt = require("bcrypt");

@@ -4,6 +4,7 @@
 const pool = require("../config/db");
 const multer = require("multer");
 const supabase = require("../config/supabaseStorage");
+const prepareJsonbFields = require("../utils/validators");
 
 const { revokeAllRefreshTokensForUser } = require("../services/token.service");
 const { logActivity, diffFields } = require("../services/activityLog.service");
@@ -114,9 +115,7 @@ async function updateMe(req, res, next) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
   }
 
-  if (updates.serve_as !== undefined) {
-    updates.serve_as = JSON.stringify(updates.serve_as);
-  }
+  prepareJsonbFields(updates, ["serve_as"]);
 
   if (Object.keys(updates).length === 0) {
     return res.status(422).json({
