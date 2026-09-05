@@ -141,6 +141,10 @@ async function updateMe(req, res, next) {
 
     const diff = diffFields(before.rows[0], updates);
 
+    if (updates.serve_as !== undefined) {
+      updates.serve_as = JSON.stringify(updates.serve_as);
+    }
+
     const result = await pool.query(
       `UPDATE users SET ${setClauses.join(", ")} WHERE id = $1 AND deleted_at IS NULL
        RETURNING id, full_name, username, phone, email, profile_photo_url,
