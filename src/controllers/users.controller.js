@@ -85,7 +85,7 @@ function calculateCompletion(user) {
     (typeof user.serve_as_other === "string" &&
       user.serve_as_other.trim() !== "");
 
-  const totalFields = fields.length + 1;
+  const totalFields = fields.length + 1; // +1 for service role
   const completedFields = filled + (hasServiceRole ? 1 : 0);
 
   return Math.round((completedFields / totalFields) * 100);
