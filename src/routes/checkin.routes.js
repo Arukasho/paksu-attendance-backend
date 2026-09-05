@@ -7,5 +7,6 @@ const authenticate = require("../middleware/authenticate");
 router.use(authenticate);
 
 router.post("/", checkinLimiter, checkinController.checkin);
+router.post("/:eventId/already-fill-form", checkinController.markFormFilled);
 
 module.exports = router;

@@ -38,7 +38,7 @@ async function processCheckin(userId) {
     if (now >= windowStart && now <= windowEnd) {
       // We're inside this event's check-in window.
       const existing = await pool.query(
-        "SELECT checked_in_at FROM attendance WHERE user_id = $1 AND event_id = $2",
+        "SELECT checked_in_at, already_fill_form FROM attendance WHERE user_id = $1 AND event_id = $2",
         [userId, event.id],
       );
 
@@ -47,6 +47,7 @@ async function processCheckin(userId) {
           status: "already_checked_in",
           event: publicEvent(event),
           checked_in_at: existing.rows[0].checked_in_at,
+          already_fill_form: existing.rows[0].already_fill_form,
         };
       }
 
@@ -79,6 +80,7 @@ async function processCheckin(userId) {
         status: "success",
         event: publicEvent(event),
         checked_in_at: inserted.rows[0].checked_in_at,
+        already_fill_form: false, // Default to false; the client can call the markFormFilled endpoint to update this.
       };
     }
 

@@ -46,7 +46,10 @@ async function list(req, res, next) {
       query += ` AND (u.full_name ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.phone ILIKE $${params.length} OR u.email ILIKE $${params.length})`;
     }
 
-    query += ` ORDER BY u.full_name ASC`;
+    query += ` ORDER BY
+                CASE WHEN u.role = 'admin' THEN 0 ELSE 1 END,
+                u.full_name ASC,
+                u.id ASC`;
 
     const result = await pool.query(query, params);
     return res.status(200).json({ data: result.rows });
